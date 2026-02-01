@@ -12,6 +12,7 @@ import {
 // DOM Elements
 const favoritesBody = document.getElementById('favorites-body') as HTMLTableSectionElement
 const addBtn = document.getElementById('add-btn') as HTMLButtonElement
+const exportBtn = document.getElementById('export-btn') as HTMLButtonElement
 const viewRankBtn = document.getElementById('view-rank') as HTMLButtonElement
 const viewRecentBtn = document.getElementById('view-recent') as HTMLButtonElement
 
@@ -200,6 +201,46 @@ function setView(view: 'rank' | 'recent'): void {
   loadFavorites()
 }
 
+// Export to CSV
+async function exportToCsv(): Promise<void> {
+  const favorites = currentView === 'rank'
+    ? await getFavorites()
+    : await getFavoritesRecent()
+
+  // CSV header
+  const headers = ['Rank', 'Album', 'Artist', 'Year', 'Last Played']
+
+  // Escape CSV field (handle commas and quotes)
+  const escapeField = (value: string | number | null): string => {
+    if (value === null || value === undefined) return ''
+    const str = String(value)
+    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+      return `"${str.replace(/"/g, '""')}"`
+    }
+    return str
+  }
+
+  // Build CSV content
+  const rows = favorites.map(f => [
+    f.rank,
+    escapeField(f.title),
+    escapeField(f.artist),
+    f.year ?? '',
+    f.last_played ?? ''
+  ].join(','))
+
+  const csvContent = [headers.join(','), ...rows].join('\n')
+
+  // Create and trigger download
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `favorite-albums-${new Date().toISOString().split('T')[0]}.csv`
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
 // Drag and drop handlers
 function handleDragStart(e: DragEvent): void {
   const row = (e.target as HTMLElement).closest('tr') as HTMLTableRowElement
@@ -272,6 +313,7 @@ async function handleDrop(e: DragEvent): Promise<void> {
 
 // Event listeners
 addBtn.addEventListener('click', openAddModal)
+exportBtn.addEventListener('click', exportToCsv)
 cancelBtn.addEventListener('click', closeModal)
 albumForm.addEventListener('submit', handleFormSubmit)
 favoritesBody.addEventListener('click', handleTableClick)
