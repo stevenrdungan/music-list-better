@@ -35,6 +35,7 @@ const deleteConfirmBtn = document.getElementById('delete-confirm') as HTMLButton
 // State
 let currentView: 'rank' | 'recent' = 'rank'
 let deleteTargetId: number | null = null
+let draggedRow: HTMLTableRowElement | null = null
 
 // Format date for display
 function formatDate(dateStr: string | null): string {
@@ -46,9 +47,10 @@ function formatDate(dateStr: string | null): string {
 
 // Render favorites table
 function renderFavorites(favorites: Favorite[]): void {
+  const isDraggable = currentView === 'rank'
   favoritesBody.innerHTML = favorites.map(f => `
-    <tr data-id="${f.id}">
-      <td>${f.rank}</td>
+    <tr data-id="${f.id}" data-rank="${f.rank}" ${isDraggable ? 'draggable="true"' : ''}>
+      <td class="drag-handle">${isDraggable ? '⋮⋮ ' : ''}${f.rank}</td>
       <td>${escapeHtml(f.title)}</td>
       <td>${escapeHtml(f.artist)}</td>
       <td>${f.year ?? '-'}</td>
@@ -198,11 +200,85 @@ function setView(view: 'rank' | 'recent'): void {
   loadFavorites()
 }
 
+// Drag and drop handlers
+function handleDragStart(e: DragEvent): void {
+  const row = (e.target as HTMLElement).closest('tr') as HTMLTableRowElement
+  if (!row || currentView !== 'rank') return
+
+  draggedRow = row
+  row.classList.add('dragging')
+  e.dataTransfer!.effectAllowed = 'move'
+  e.dataTransfer!.setData('text/plain', row.dataset.id!)
+}
+
+function handleDragOver(e: DragEvent): void {
+  e.preventDefault()
+  if (!draggedRow || currentView !== 'rank') return
+
+  const row = (e.target as HTMLElement).closest('tr') as HTMLTableRowElement
+  if (!row || row === draggedRow) return
+
+  e.dataTransfer!.dropEffect = 'move'
+
+  // Remove existing drop indicators
+  favoritesBody.querySelectorAll('tr').forEach(r => {
+    r.classList.remove('drop-above', 'drop-below')
+  })
+
+  // Add indicator based on mouse position
+  const rect = row.getBoundingClientRect()
+  const midpoint = rect.top + rect.height / 2
+  if (e.clientY < midpoint) {
+    row.classList.add('drop-above')
+  } else {
+    row.classList.add('drop-below')
+  }
+}
+
+function handleDragEnd(): void {
+  if (draggedRow) {
+    draggedRow.classList.remove('dragging')
+  }
+  draggedRow = null
+  favoritesBody.querySelectorAll('tr').forEach(r => {
+    r.classList.remove('drop-above', 'drop-below')
+  })
+}
+
+async function handleDrop(e: DragEvent): Promise<void> {
+  e.preventDefault()
+  if (!draggedRow || currentView !== 'rank') return
+
+  const targetRow = (e.target as HTMLElement).closest('tr') as HTMLTableRowElement
+  if (!targetRow || targetRow === draggedRow) {
+    handleDragEnd()
+    return
+  }
+
+  const draggedId = parseInt(draggedRow.dataset.id!)
+  const targetRank = parseInt(targetRow.dataset.rank!)
+
+  // Determine if dropping above or below target
+  const rect = targetRow.getBoundingClientRect()
+  const midpoint = rect.top + rect.height / 2
+  const newRank = e.clientY < midpoint ? targetRank : targetRank + 1
+
+  handleDragEnd()
+
+  // Update the rank via API
+  await updateFavorite(draggedId, { rank: newRank })
+  await loadFavorites()
+}
+
 // Event listeners
 addBtn.addEventListener('click', openAddModal)
 cancelBtn.addEventListener('click', closeModal)
 albumForm.addEventListener('submit', handleFormSubmit)
 favoritesBody.addEventListener('click', handleTableClick)
+favoritesBody.addEventListener('dragstart', handleDragStart)
+favoritesBody.addEventListener('dragover', handleDragOver)
+favoritesBody.addEventListener('dragend', handleDragEnd)
+favoritesBody.addEventListener('drop', handleDrop)
 viewRankBtn.addEventListener('click', () => setView('rank'))
 viewRecentBtn.addEventListener('click', () => setView('recent'))
 deleteCancelBtn.addEventListener('click', closeDeleteModal)
