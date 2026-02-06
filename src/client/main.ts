@@ -334,10 +334,7 @@ document.addEventListener('keydown', (e) => {
   }
 })
 
-// Close modal on backdrop click
-modal.addEventListener('click', (e) => {
-  if (e.target === modal) closeModal()
-})
+// Close delete modal on backdrop click
 deleteModal.addEventListener('click', (e) => {
   if (e.target === deleteModal) closeDeleteModal()
 })
